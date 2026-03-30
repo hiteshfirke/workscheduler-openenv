@@ -2,7 +2,7 @@
 title: WorkScheduler OpenEnv
 emoji: 📅
 colorFrom: purple
-colorTo: teal
+colorTo: blue
 sdk: docker
 pinned: false
 tags:
