@@ -1,0 +1,49 @@
+name: workscheduler-openenv
+version: "1.0.0"
+description: >
+  A real-world AI agent environment for task scheduling.
+  The agent assigns jobs to workers while respecting
+  deadlines, worker capacities, and task dependencies.
+
+author: Hitesh Firke
+tags:
+  - openenv
+  - scheduling
+  - planning
+  - real-world
+
+tasks:
+  - id: easy
+    name: Basic Task Assignment
+    difficulty: easy
+    description: Assign 5 independent tasks to 3 workers.
+
+  - id: medium
+    name: Deadline-Aware Scheduling
+    difficulty: medium
+    description: Assign 6 tasks with deadlines and dependencies.
+
+  - id: hard
+    name: Dynamic Scheduling with Disruptions
+    difficulty: hard
+    description: 8 tasks, 4 workers, one worker goes on leave mid-episode.
+
+observation_space:
+  pending_tasks: List of unassigned tasks
+  workers: List of workers with capacity and availability
+  current_step: Integer step counter
+  assigned: Dict mapping task_id to worker_id
+  missed_deadlines: Count of expired tasks
+
+action_space:
+  task_id: ID of the task to assign
+  worker_id: ID of the worker to assign it to
+
+reward:
+  range: [0.0, 1.0]
+  base: 0.5 for any valid assignment
+  bonuses: priority level, meeting deadlines, balanced workload
+  penalties: late assignment, invalid action
+
+entry_point: env.scheduler:WorkSchedulerEnv
+inference_script: inference.py
