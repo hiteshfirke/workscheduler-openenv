@@ -9,6 +9,7 @@ class Task(BaseModel):
     priority: int = 1
     depends_on: List[str] = []
     is_assigned: bool = False
+    required_skill: Optional[str] = None   # NEW — e.g. "backend", "design"
 
 class Worker(BaseModel):
     id: str
@@ -16,6 +17,7 @@ class Worker(BaseModel):
     capacity: int = 3
     assigned_task_ids: List[str] = []
     available: bool = True
+    skills: List[str] = []                 # NEW — e.g. ["backend", "testing"]
 
 class Observation(BaseModel):
     pending_tasks: List[Task]

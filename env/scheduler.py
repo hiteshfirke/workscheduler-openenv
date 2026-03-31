@@ -5,57 +5,82 @@ from .models import Observation, Action, Reward, Task, Worker
 # ── The tasks and workers for each difficulty ──────────────────
 
 EASY_TASKS = [
-    Task(id="t1", name="Write unit tests",     duration=2, priority=1),
-    Task(id="t2", name="Fix login bug",        duration=3, priority=2),
-    Task(id="t3", name="Update docs",          duration=1, priority=1),
-    Task(id="t4", name="Code review PR",       duration=2, priority=2),
-    Task(id="t5", name="Deploy staging build", duration=4, priority=3),
+    Task(id="t1", name="Write unit tests",     duration=2, priority=1, required_skill="testing"),
+    Task(id="t2", name="Fix login bug",        duration=3, priority=2, required_skill="backend"),
+    Task(id="t3", name="Update docs",          duration=1, priority=1, required_skill="writing"),
+    Task(id="t4", name="Code review PR",       duration=2, priority=2, required_skill="backend"),
+    Task(id="t5", name="Deploy staging build", duration=4, priority=3, required_skill="devops"),
 ]
 EASY_WORKERS = [
-    Worker(id="w1", name="Alice", capacity=3),
-    Worker(id="w2", name="Bob",   capacity=2),
-    Worker(id="w3", name="Charlie", capacity=2),
+    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "devops"]),
+    Worker(id="w2", name="Bob",     capacity=2, skills=["testing", "backend"]),
+    Worker(id="w3", name="Charlie", capacity=2, skills=["writing", "testing"]),
 ]
 
 MEDIUM_TASKS = [
-    Task(id="t1", name="Design database",    duration=4, deadline=3, priority=3),
-    Task(id="t2", name="Setup CI pipeline",  duration=3, deadline=4, priority=2),
-    Task(id="t3", name="Build API",          duration=5, deadline=6, priority=3, depends_on=["t1"]),
-    Task(id="t4", name="Write tests",        duration=3, deadline=7, priority=2, depends_on=["t3"]),
-    Task(id="t5", name="Frontend page",      duration=4, deadline=5, priority=2),
-    Task(id="t6", name="Security audit",     duration=3, deadline=6, priority=3),
+    Task(id="t1", name="Design database",   duration=4, deadline=3, priority=3, required_skill="backend"),
+    Task(id="t2", name="Setup CI pipeline", duration=3, deadline=4, priority=2, required_skill="devops"),
+    Task(id="t3", name="Build API",         duration=5, deadline=6, priority=3, depends_on=["t1"], required_skill="backend"),
+    Task(id="t4", name="Write tests",       duration=3, deadline=7, priority=2, depends_on=["t3"], required_skill="testing"),
+    Task(id="t5", name="Frontend page",     duration=4, deadline=5, priority=2, required_skill="frontend"),
+    Task(id="t6", name="Security audit",    duration=3, deadline=6, priority=3, required_skill="security"),
 ]
 MEDIUM_WORKERS = [
-    Worker(id="w1", name="Alice",   capacity=3),
-    Worker(id="w2", name="Bob",     capacity=3),
-    Worker(id="w3", name="Charlie", capacity=2),
+    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "security"]),
+    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"]),
+    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "testing"]),
 ]
 
 HARD_TASKS = [
-    Task(id="t1", name="Gather requirements", duration=2, deadline=2,  priority=3),
-    Task(id="t2", name="System architecture", duration=5, deadline=4,  priority=3, depends_on=["t1"]),
-    Task(id="t3", name="Database design",     duration=3, deadline=5,  priority=2, depends_on=["t2"]),
-    Task(id="t4", name="Auth service",        duration=4, deadline=6,  priority=3, depends_on=["t2"]),
-    Task(id="t5", name="Payment integration", duration=6, deadline=8,  priority=3, depends_on=["t4"]),
-    Task(id="t6", name="Admin dashboard",     duration=4, deadline=9,  priority=2, depends_on=["t3"]),
-    Task(id="t7", name="Load testing",        duration=3, deadline=9,  priority=2, depends_on=["t5","t6"]),
-    Task(id="t8", name="Go-live deployment",  duration=2, deadline=11, priority=3, depends_on=["t7"]),
+    Task(id="t1", name="Gather requirements", duration=2, deadline=2,  priority=3, required_skill="management"),
+    Task(id="t2", name="System architecture", duration=5, deadline=4,  priority=3, depends_on=["t1"], required_skill="backend"),
+    Task(id="t3", name="Database design",     duration=3, deadline=5,  priority=2, depends_on=["t2"], required_skill="backend"),
+    Task(id="t4", name="Auth service",        duration=4, deadline=6,  priority=3, depends_on=["t2"], required_skill="security"),
+    Task(id="t5", name="Payment integration", duration=6, deadline=8,  priority=3, depends_on=["t4"], required_skill="backend"),
+    Task(id="t6", name="Admin dashboard",     duration=4, deadline=9,  priority=2, depends_on=["t3"], required_skill="frontend"),
+    Task(id="t7", name="Load testing",        duration=3, deadline=9,  priority=2, depends_on=["t5","t6"], required_skill="testing"),
+    Task(id="t8", name="Go-live deployment",  duration=2, deadline=11, priority=3, depends_on=["t7"], required_skill="devops"),
 ]
 HARD_WORKERS = [
-    Worker(id="w1", name="Alice",   capacity=3),
-    Worker(id="w2", name="Bob",     capacity=3),
-    Worker(id="w3", name="Charlie", capacity=2),
-    Worker(id="w4", name="Diana",   capacity=2),
+    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "management"]),
+    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"]),
+    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "security"]),
+    Worker(id="w4", name="Diana",   capacity=2, skills=["backend", "security"]),
 ]
 # In hard mode: Bob goes on leave after step 4
 HARD_LEAVE = {"w2": 4}
-
+EXPERT_TASKS = [
+    Task(id="t1",  name="Client requirements",   duration=2, deadline=2,  priority=3, required_skill="management"),
+    Task(id="t2",  name="System design",          duration=4, deadline=4,  priority=3, depends_on=["t1"], required_skill="backend"),
+    Task(id="t3",  name="Database schema",        duration=3, deadline=5,  priority=2, depends_on=["t2"], required_skill="backend"),
+    Task(id="t4",  name="Auth microservice",      duration=4, deadline=6,  priority=3, depends_on=["t2"], required_skill="security"),
+    Task(id="t5",  name="Payment gateway",        duration=5, deadline=8,  priority=3, depends_on=["t4"], required_skill="backend"),
+    Task(id="t6",  name="Frontend dashboard",     duration=4, deadline=7,  priority=2, depends_on=["t3"], required_skill="frontend"),
+    Task(id="t7",  name="Mobile app",             duration=6, deadline=9,  priority=2, depends_on=["t3"], required_skill="frontend"),
+    Task(id="t8",  name="Load testing",           duration=3, deadline=10, priority=2, depends_on=["t5","t6"], required_skill="testing"),
+    Task(id="t9",  name="Security audit",         duration=3, deadline=10, priority=3, depends_on=["t5"], required_skill="security"),
+    Task(id="t10", name="Production deployment",  duration=2, deadline=12, priority=3, depends_on=["t8","t9"], required_skill="devops"),
+]
+EXPERT_WORKERS = [
+    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "management"]),
+    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"]),
+    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "testing"]),
+    Worker(id="w4", name="Diana",   capacity=2, skills=["security", "backend"]),
+    Worker(id="w5", name="Eve",     capacity=2, skills=["frontend", "management"]),
+]
+# Expert mode events: Bob leaves at step 3, urgent task injected at step 5
+EXPERT_LEAVE   = {"w2": 3}
+EXPERT_URGENT  = Task(
+    id="t11", name="URGENT: Fix prod outage",
+    duration=2, deadline=7, priority=3,
+    required_skill="devops"
+)
 # ── The main environment class ─────────────────────────────────
 
 class WorkSchedulerEnv:
 
     def __init__(self, difficulty: str = "easy"):
-        assert difficulty in ("easy", "medium", "hard")
+        assert difficulty in ("easy", "medium", "hard", "expert")
         self.difficulty = difficulty
         self._reset_state()
 
@@ -87,6 +112,9 @@ class WorkSchedulerEnv:
         if self.difficulty == "hard":
             self._apply_hard_events()
 
+        if self.difficulty == "expert":
+            self._apply_expert_events()
+            
         self._check_missed_deadlines()
         self.done = self._check_done()
 
@@ -101,9 +129,13 @@ class WorkSchedulerEnv:
         elif self.difficulty == "medium":
             self.pending_tasks = copy.deepcopy(MEDIUM_TASKS)
             self.workers       = copy.deepcopy(MEDIUM_WORKERS)
-        else:
+        elif self.difficulty == "hard":
             self.pending_tasks = copy.deepcopy(HARD_TASKS)
             self.workers       = copy.deepcopy(HARD_WORKERS)
+        else:   # expert
+            self.pending_tasks = copy.deepcopy(EXPERT_TASKS)
+            self.workers       = copy.deepcopy(EXPERT_WORKERS)
+            self._urgent_injected = False
 
         self.current_step     = 0
         self.assigned         = {}
@@ -126,6 +158,11 @@ class WorkSchedulerEnv:
         for dep in task.depends_on:
             if dep not in self.assigned:
                 return Reward(value=0.1, reason=f"Dependency {dep} not yet assigned."), {}
+        if task.required_skill and task.required_skill not in worker.skills:
+            return Reward(
+                value=0.2,
+                reason=f"{worker.name} lacks skill '{task.required_skill}' for '{task.name}'."
+            ), {}
 
         # Valid assignment — do it
         worker.assigned_task_ids.append(task.id)
@@ -134,6 +171,9 @@ class WorkSchedulerEnv:
 
         # Calculate reward
         score = 0.5
+        # Bonus for correct skill match
+        if task.required_skill and task.required_skill in worker.skills:
+            score += 0.1
         score += (task.priority - 1) * 0.1          # +0.1 or +0.2 for higher priority
 
         if task.deadline is not None:
@@ -157,6 +197,19 @@ class WorkSchedulerEnv:
                 if w:
                     w.available = False
 
+    def _apply_expert_events(self):
+        # Worker goes on leave
+        for wid, leave_step in EXPERT_LEAVE.items():
+            if self.current_step == leave_step:
+                w = next((w for w in self.workers if w.id == wid), None)
+                if w:
+                    w.available = False
+
+        # Inject urgent task mid-episode at step 5
+        if self.current_step == 5 and not self._urgent_injected:
+            self.pending_tasks.append(copy.deepcopy(EXPERT_URGENT))
+            self.total_tasks += 1
+            self._urgent_injected = True
     def _check_missed_deadlines(self):
         expired = [t for t in self.pending_tasks
                    if t.deadline is not None and self.current_step > t.deadline]
