@@ -1,15 +1,12 @@
-FROM python:3.11-slim
+FROM python:3.11
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip install --no-cache-dir pydantic openai pyyaml fastapi uvicorn
 
 COPY . .
-
-ENV API_BASE_URL="https://api-inference.huggingface.co/v1"
-ENV MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
-ENV HF_TOKEN=""
 
 EXPOSE 7860
 
