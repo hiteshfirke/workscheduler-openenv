@@ -12,11 +12,8 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Stores one environment per session
 sessions: Dict[str, WorkSchedulerEnv] = {}
 
-
-# ── Request models ─────────────────────────────────────────────
 
 class ResetRequest(BaseModel):
     difficulty: str = "easy"
@@ -31,8 +28,6 @@ class GradeRequest(BaseModel):
     difficulty: str = "easy"
 
 
-# ── Routes ─────────────────────────────────────────────────────
-
 @app.get("/")
 def health_check():
     return {"status": "ok", "env": "workscheduler-openenv", "version": "1.0.0"}
@@ -42,11 +37,11 @@ def health_check():
 def info():
     return {
         "name": "workscheduler-openenv",
-        "tasks": ["easy", "medium", "hard"],
+        "tasks": ["easy", "medium", "hard", "expert"],
         "action_space": {"task_id": "string", "worker_id": "string"},
         "observation_space": {
             "pending_tasks": "list of unassigned tasks",
-            "workers": "list of workers",
+            "workers": "list of workers with skills and capacity",
             "current_step": "int",
             "assigned": "dict task_id -> worker_id",
             "missed_deadlines": "int",
@@ -56,10 +51,9 @@ def info():
 
 @app.post("/reset")
 def reset(req: ResetRequest):
-    if req.difficulty not in ("easy", "medium", "hard"):
-        raise HTTPException(status_code=400, detail="difficulty must be easy, medium, or hard")
+    if req.difficulty not in ("easy", "medium", "hard", "expert"):
+        raise HTTPException(status_code=400, detail="difficulty must be easy, medium, hard or expert")
 
-    # Clean up if too many sessions
     if len(sessions) >= 50:
         del sessions[next(iter(sessions))]
 
@@ -96,24 +90,32 @@ def grade(req: GradeRequest):
     from tasks.easy   import grade as grade_easy
     from tasks.medium import grade as grade_medium
     from tasks.hard   import grade as grade_hard
+    from tasks.expert import grade as grade_expert
 
     def greedy(obs):
         assigned = set(obs.assigned.keys())
-        for task in sorted(obs.pending_tasks, key=lambda t: -t.priority):
+        for task in sorted(obs.pending_tasks, key=lambda t: (-t.priority, t.deadline or 999)):
             if all(d in assigned for d in task.depends_on):
-                for w in obs.workers:
+                for w in sorted(obs.workers, key=lambda w: len(w.assigned_task_ids)):
                     if w.available and len(w.assigned_task_ids) < w.capacity:
-                        return Action(task_id=task.id, worker_id=w.id)
-        return Action(task_id=obs.pending_tasks[0].id, worker_id=obs.workers[0].id)
+                        if not task.required_skill or task.required_skill in w.skills:
+                            return Action(task_id=task.id, worker_id=w.id)
+        for task in obs.pending_tasks:
+            for w in obs.workers:
+                if w.available and len(w.assigned_task_ids) < w.capacity:
+                    return Action(task_id=task.id, worker_id=w.id)
 
-    graders = {"easy": grade_easy, "medium": grade_medium, "hard": grade_hard}
+    graders = {
+        "easy":   grade_easy,
+        "medium": grade_medium,
+        "hard":   grade_hard,
+        "expert": grade_expert,
+    }
     if req.difficulty not in graders:
-        raise HTTPException(status_code=400, detail="difficulty must be easy, medium, or hard")
+        raise HTTPException(status_code=400, detail="difficulty must be easy, medium, hard or expert")
 
     return graders[req.difficulty](greedy)
 
-
-# ── Run ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import uvicorn
