@@ -1,6 +1,7 @@
 import os, sys, uuid
 from typing import Dict
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -116,7 +117,158 @@ def grade(req: GradeRequest):
 
     return graders[req.difficulty](greedy)
 
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
 
+    rows = ""
+    for session_id, env in sessions.items():
+        state = env.state()
+        assigned = state["assigned"]
+        cancelled = state.get("cancelled_tasks", [])
+        workers = state["workers"]
+        pending = state["pending_tasks"]
+
+        # Worker rows
+        worker_html = ""
+        for w in workers:
+            load = len(w["assigned_task_ids"])
+            cap  = w["capacity"]
+            bar  = "█" * load + "░" * max(0, cap - load)
+            status = "on leave" if not w["available"] else f"{load}/{cap}"
+            color  = "#ff6b6b" if not w["available"] else ("#ffd93d" if load >= cap else "#6bcb77")
+            worker_html += f"""
+            <tr>
+              <td>{w['name']}</td>
+              <td>{', '.join(w['skills'])}</td>
+              <td style='color:{color}'>{status} {bar}</td>
+              <td>{', '.join(w['assigned_task_ids']) or '—'}</td>
+            </tr>"""
+
+        # Task summary
+        task_html = ""
+        for t in pending:
+            deadline_str = f"step {t['deadline']}" if t.get('deadline') else "none"
+            task_html += f"""
+            <tr>
+              <td>{t['id']}</td>
+              <td>{t['name']}</td>
+              <td>{'⭐' * t['priority']}</td>
+              <td>{t.get('required_skill','—')}</td>
+              <td>{deadline_str}</td>
+              <td style='color:#ffd93d'>pending</td>
+            </tr>"""
+
+        for tid, wid in assigned.items():
+            task_html += f"""
+            <tr>
+              <td>{tid}</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td style='color:#6bcb77'>assigned → {wid}</td>
+            </tr>"""
+
+        for tid in cancelled:
+            task_html += f"""
+            <tr>
+              <td>{tid}</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td style='color:#ff6b6b'>cancelled</td>
+            </tr>"""
+
+        rows += f"""
+        <div class='session'>
+          <h2>Session: {session_id} 
+              — {state['difficulty'].upper()} 
+              — Step {state['current_step']}
+              — Missed: {state['missed_deadlines']}
+              {'— DONE' if state['done'] else ''}
+          </h2>
+
+          <h3>Workers</h3>
+          <table>
+            <tr>
+              <th>Name</th><th>Skills</th><th>Load</th><th>Tasks</th>
+            </tr>
+            {worker_html}
+          </table>
+
+          <h3>Tasks</h3>
+          <table>
+            <tr>
+              <th>ID</th><th>Name</th><th>Priority</th>
+              <th>Skill</th><th>Deadline</th><th>Status</th>
+            </tr>
+            {task_html}
+          </table>
+        </div>"""
+
+    if not rows:
+        rows = "<p style='color:#888'>No active sessions. Call /reset first to start one.</p>"
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>WorkScheduler Dashboard</title>
+      <meta http-equiv='refresh' content='5'>
+      <style>
+        body {{
+          font-family: monospace;
+          background: #1a1a2e;
+          color: #eee;
+          padding: 24px;
+        }}
+        h1 {{ color: #a78bfa; margin-bottom: 8px; }}
+        h2 {{ color: #60a5fa; border-bottom: 1px solid #333; padding-bottom: 6px; }}
+        h3 {{ color: #34d399; margin-top: 16px; }}
+        table {{
+          border-collapse: collapse;
+          width: 100%;
+          margin-bottom: 16px;
+        }}
+        th {{
+          background: #2d2d44;
+          padding: 8px 12px;
+          text-align: left;
+          color: #a78bfa;
+        }}
+        td {{
+          padding: 6px 12px;
+          border-bottom: 1px solid #2a2a3e;
+        }}
+        tr:hover td {{ background: #2a2a3e; }}
+        .session {{
+          background: #16213e;
+          border: 1px solid #2d2d44;
+          border-radius: 8px;
+          padding: 16px;
+          margin-bottom: 24px;
+        }}
+        .footer {{
+          color: #555;
+          font-size: 12px;
+          margin-top: 24px;
+        }}
+      </style>
+    </head>
+    <body>
+      <h1>WorkScheduler-OpenEnv Dashboard</h1>
+      <p style='color:#888'>Auto-refreshes every 5 seconds</p>
+      {rows}
+      <div class='footer'>
+        WorkScheduler-OpenEnv v1.0.0 — 
+        <a href='/docs' style='color:#60a5fa'>API Docs</a>
+      </div>
+    </body>
+    </html>"""
+
+    return HTMLResponse(content=html)
+    
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 7860))

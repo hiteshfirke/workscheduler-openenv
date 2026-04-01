@@ -15,6 +15,7 @@ class Worker(BaseModel):
     id: str
     name: str
     capacity: int = 3
+    overtime_capacity: int = 1
     assigned_task_ids: List[str] = []
     available: bool = True
     skills: List[str] = []                 # NEW — e.g. ["backend", "testing"]
@@ -26,6 +27,7 @@ class Observation(BaseModel):
     assigned: Dict[str, str] = {}
     total_tasks: int = 0
     missed_deadlines: int = 0
+    cancelled_tasks: List[str] = []
 
 class Action(BaseModel):
     task_id: str

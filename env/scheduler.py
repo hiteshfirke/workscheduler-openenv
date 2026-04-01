@@ -5,16 +5,39 @@ from .models import Observation, Action, Reward, Task, Worker
 # ── The tasks and workers for each difficulty ──────────────────
 
 EASY_TASKS = [
-    Task(id="t1", name="Write unit tests",     duration=2, priority=1, required_skill="testing"),
-    Task(id="t2", name="Fix login bug",        duration=3, priority=2, required_skill="backend"),
-    Task(id="t3", name="Update docs",          duration=1, priority=1, required_skill="writing"),
-    Task(id="t4", name="Code review PR",       duration=2, priority=2, required_skill="backend"),
-    Task(id="t5", name="Deploy staging build", duration=4, priority=3, required_skill="devops"),
+    Task(id="t1",  name="Write unit tests",       duration=2, priority=1, required_skill="testing"),
+    Task(id="t2",  name="Fix login bug",           duration=3, priority=2, required_skill="backend"),
+    Task(id="t3",  name="Update docs",             duration=1, priority=1, required_skill="writing"),
+    Task(id="t4",  name="Code review PR",          duration=2, priority=2, required_skill="backend"),
+    Task(id="t5",  name="Deploy staging build",    duration=4, priority=3, required_skill="devops"),
+    Task(id="t6",  name="Fix payment bug",         duration=3, priority=3, required_skill="backend"),
+    Task(id="t7",  name="Design landing page",     duration=4, priority=2, required_skill="frontend"),
+    Task(id="t8",  name="Write API docs",          duration=2, priority=1, required_skill="writing"),
+    Task(id="t9",  name="Setup monitoring",        duration=3, priority=2, required_skill="devops"),
+    Task(id="t10", name="Database backup script",  duration=2, priority=2, required_skill="backend"),
+    Task(id="t11", name="Fix mobile layout",       duration=3, priority=2, required_skill="frontend"),
+    Task(id="t12", name="Security scan",           duration=2, priority=3, required_skill="security"),
+    Task(id="t13", name="Optimize SQL queries",    duration=3, priority=2, required_skill="backend"),
+    Task(id="t14", name="Setup error logging",     duration=2, priority=1, required_skill="devops"),
+    Task(id="t15", name="Write release notes",     duration=1, priority=1, required_skill="writing"),
+    Task(id="t16", name="Add dark mode",           duration=4, priority=2, required_skill="frontend"),
+    Task(id="t17", name="Load test API",           duration=3, priority=2, required_skill="testing"),
+    Task(id="t18", name="Fix email templates",     duration=2, priority=1, required_skill="frontend"),
+    Task(id="t19", name="Review access controls",  duration=2, priority=3, required_skill="security"),
+    Task(id="t20", name="Deploy production",       duration=3, priority=3, required_skill="devops"),
 ]
+
 EASY_WORKERS = [
-    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "devops"]),
-    Worker(id="w2", name="Bob",     capacity=2, skills=["testing", "backend"]),
-    Worker(id="w3", name="Charlie", capacity=2, skills=["writing", "testing"]),
+    Worker(id="w1",  name="Alice",   capacity=3, skills=["backend", "devops"]),
+    Worker(id="w2",  name="Bob",     capacity=3, skills=["testing", "backend"]),
+    Worker(id="w3",  name="Charlie", capacity=2, skills=["writing", "testing"]),
+    Worker(id="w4",  name="Diana",   capacity=3, skills=["frontend", "writing"]),
+    Worker(id="w5",  name="Eve",     capacity=2, skills=["security", "backend"]),
+    Worker(id="w6",  name="Frank",   capacity=3, skills=["devops", "testing"]),
+    Worker(id="w7",  name="Grace",   capacity=2, skills=["frontend", "security"]),
+    Worker(id="w8",  name="Henry",   capacity=3, skills=["backend", "writing"]),
+    Worker(id="w9",  name="Iris",    capacity=2, skills=["testing", "frontend"]),
+    Worker(id="w10", name="Jack",    capacity=3, skills=["devops", "security"]),
 ]
 
 MEDIUM_TASKS = [
@@ -97,6 +120,8 @@ class WorkSchedulerEnv:
             "done":             self.done,
             "assigned":         self.assigned,
             "missed_deadlines": self.missed_deadlines,
+            "cancelled_tasks":  self.cancelled_tasks,
+            "total_tasks":      self.total_tasks,
             "pending_tasks":    [t.model_dump() for t in self.pending_tasks],
             "workers":          [w.model_dump() for w in self.workers],
         }
@@ -114,7 +139,8 @@ class WorkSchedulerEnv:
 
         if self.difficulty == "expert":
             self._apply_expert_events()
-            
+        self._apply_cancellation()   
+
         self._check_missed_deadlines()
         self.done = self._check_done()
 
@@ -137,11 +163,14 @@ class WorkSchedulerEnv:
             self.workers       = copy.deepcopy(EXPERT_WORKERS)
             self._urgent_injected = False
 
-        self.current_step     = 0
-        self.assigned         = {}
-        self.missed_deadlines = 0
-        self.done             = False
-        self.total_tasks      = len(self.pending_tasks)
+        self.current_step      = 0
+        self.assigned          = {}
+        self.missed_deadlines  = 0
+        self.done              = False
+        self.total_tasks       = len(self.pending_tasks)
+        self.cancelled_tasks   = []        # NEW — tracks cancelled task IDs
+        self._cancel_step      = max(3, len(self.pending_tasks) // 3)  # cancel at 1/3 through
+        self._cancelled_already = False    # NEW
 
     def _apply_action(self, action: Action) -> Tuple[Reward, Dict]:
         task   = next((t for t in self.pending_tasks if t.id == action.task_id), None)
@@ -153,8 +182,9 @@ class WorkSchedulerEnv:
             return Reward(value=0.0, reason="Worker not found."), {}
         if not worker.available:
             return Reward(value=0.1, reason=f"{worker.name} is on leave."), {}
-        if len(worker.assigned_task_ids) >= worker.capacity:
-            return Reward(value=0.1, reason=f"{worker.name} is at full capacity."), {}
+        total_allowed = worker.capacity + worker.overtime_capacity
+        if len(worker.assigned_task_ids) >= total_allowed:
+            return Reward(value=0.1, reason=f"{worker.name} is at full capacity including overtime."), {}
         for dep in task.depends_on:
             if dep not in self.assigned:
                 return Reward(value=0.1, reason=f"Dependency {dep} not yet assigned."), {}
@@ -170,21 +200,43 @@ class WorkSchedulerEnv:
         self.pending_tasks = [t for t in self.pending_tasks if t.id != task.id]
 
         # Calculate reward
+        # Base score
         score = 0.5
-        # Bonus for correct skill match
+
+        # Skill match bonus
         if task.required_skill and task.required_skill in worker.skills:
             score += 0.1
-        score += (task.priority - 1) * 0.1          # +0.1 or +0.2 for higher priority
 
+        # Priority bonus
+        score += (task.priority - 1) * 0.1   # +0.0, +0.1, or +0.2
+
+        # Deadline bonus/penalty
         if task.deadline is not None:
-            if self.current_step <= task.deadline:
-                score += 0.2                         # met deadline
+            steps_remaining = task.deadline - self.current_step
+            if steps_remaining < 0:
+                score -= 0.2                  # already past deadline
+            elif steps_remaining <= 1:
+                score += 0.2                  # urgent — assigned just in time
+            elif steps_remaining <= 3:
+                score += 0.15                 # assigned with a little buffer
             else:
-                score -= 0.2                         # missed deadline
+                score += 0.05                 # assigned early, small bonus
 
+        # Workload balance — bonus for normal load, penalty for overtime
         load = len(worker.assigned_task_ids) / worker.capacity
         if load <= 0.5:
-            score += 0.1                             # bonus for spreading work
+            score += 0.1                      # well balanced
+        elif load > 1.0:
+            score -= 0.15                     # overtime penalty — hurts quality
+
+        # Penalty for assigning a low priority task when high priority ones exist
+        high_priority_pending = [
+            t for t in self.pending_tasks
+            if t.priority == 3 and t.id != task.id
+            and all(d in self.assigned for d in t.depends_on)
+        ]
+        if high_priority_pending and task.priority == 1:
+            score -= 0.1                      # penalize ignoring urgent tasks
 
         score = round(min(1.0, max(0.0, score)), 3)
         return Reward(value=score, reason=f"Assigned '{task.name}' to {worker.name}."), \
@@ -196,7 +248,26 @@ class WorkSchedulerEnv:
                 w = next((w for w in self.workers if w.id == wid), None)
                 if w:
                     w.available = False
+    def _apply_cancellation(self):
+        """Cancel one pending task once, at a fixed step."""
+        if self._cancelled_already:
+            return
+        if self.current_step != self._cancel_step:
+            return
+        if not self.pending_tasks:
+            return
 
+        candidate = sorted(
+            self.pending_tasks,
+            key=lambda t: (t.priority, t.deadline or 999)
+        )[0]
+
+        self.cancelled_tasks.append(candidate.id)
+        self.pending_tasks = [
+            t for t in self.pending_tasks if t.id != candidate.id
+        ]
+        self.total_tasks -= 1
+        self._cancelled_already = True     # NEW — never run again
     def _apply_expert_events(self):
         # Worker goes on leave
         for wid, leave_step in EXPERT_LEAVE.items():
@@ -235,4 +306,5 @@ class WorkSchedulerEnv:
             assigned          = dict(self.assigned),
             total_tasks       = self.total_tasks,
             missed_deadlines  = self.missed_deadlines,
+            cancelled_tasks  = list(self.cancelled_tasks),
         )
