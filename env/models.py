@@ -9,7 +9,8 @@ class Task(BaseModel):
     priority: int = 1
     depends_on: List[str] = []
     is_assigned: bool = False
-    required_skill: Optional[str] = None   # NEW — e.g. "backend", "design"
+    required_skill: Optional[str] = None
+    project_id: str = "default"
 
 class Worker(BaseModel):
     id: str
@@ -28,10 +29,12 @@ class Observation(BaseModel):
     total_tasks: int = 0
     missed_deadlines: int = 0
     cancelled_tasks: List[str] = []
+    projects: Dict[str, List[str]] = {}
 
 class Action(BaseModel):
     task_id: str
     worker_id: str
+    project_id: str = "default" 
 
 class Reward(BaseModel):
     value: float = Field(ge=0.0, le=1.0)

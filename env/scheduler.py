@@ -98,12 +98,44 @@ EXPERT_URGENT  = Task(
     duration=2, deadline=7, priority=3,
     required_skill="devops"
 )
+MULTI_WORKERS = [
+    Worker(id="w1", name="Alice",   capacity=6, skills=["backend",  "management"]),
+    Worker(id="w2", name="Bob",     capacity=5, skills=["devops",   "testing"]),
+    Worker(id="w3", name="Charlie", capacity=5, skills=["frontend", "writing"]),
+    Worker(id="w4", name="Diana",   capacity=5, skills=["security", "backend"]),
+    Worker(id="w5", name="Eve",     capacity=5, skills=["testing",  "frontend"]),
+]
+# ── Multi-project mode ─────────────────────────────────────────
+
+PROJECT_FRONTEND = [
+    Task(id="f1", name="Design homepage",      duration=3, deadline=5,  priority=2, required_skill="frontend",  project_id="frontend"),
+    Task(id="f2", name="Build nav component",  duration=2, deadline=8,  priority=2, required_skill="frontend",  project_id="frontend", depends_on=["f1"]),
+    Task(id="f3", name="Mobile responsive",    duration=3, deadline=11, priority=2, required_skill="frontend",  project_id="frontend", depends_on=["f2"]),
+    Task(id="f4", name="Write UI tests",       duration=2, deadline=13, priority=1, required_skill=None,        project_id="frontend", depends_on=["f2"]),
+    Task(id="f5", name="Deploy frontend",      duration=2, deadline=16, priority=3, required_skill="devops",    project_id="frontend", depends_on=["f3","f4"]),
+]
+
+PROJECT_BACKEND = [
+    Task(id="b1", name="Design API schema",    duration=3, deadline=4,  priority=3, required_skill="backend",    project_id="backend"),
+    Task(id="b2", name="Build auth endpoints", duration=4, deadline=8,  priority=3, required_skill="backend",    project_id="backend", depends_on=["b1"]),
+    Task(id="b3", name="Build data endpoints", duration=4, deadline=8,  priority=2, required_skill="backend",    project_id="backend", depends_on=["b1"]),
+    Task(id="b4", name="Security audit",       duration=2, deadline=11, priority=3, required_skill="security",   project_id="backend", depends_on=["b2"]),
+    Task(id="b5", name="Deploy backend",       duration=2, deadline=14, priority=3, required_skill="devops",     project_id="backend", depends_on=["b3","b4"]),
+]
+
+PROJECT_INFRA = [
+    Task(id="i1", name="Setup cloud env",      duration=3, deadline=4,  priority=3, required_skill="devops",    project_id="infra"),
+    Task(id="i2", name="Configure CI/CD",      duration=3, deadline=8,  priority=2, required_skill="devops",    project_id="infra",   depends_on=["i1"]),
+    Task(id="i3", name="Setup monitoring",     duration=2, deadline=10, priority=2, required_skill="devops",    project_id="infra",   depends_on=["i1"]),
+    Task(id="i4", name="Load testing",         duration=3, deadline=13, priority=2, required_skill="testing",   project_id="infra",   depends_on=["i2","i3"]),
+    Task(id="i5", name="Write runbooks",       duration=2, deadline=16, priority=1, required_skill="writing",   project_id="infra",   depends_on=["i4"]),
+]
 # ── The main environment class ─────────────────────────────────
 
 class WorkSchedulerEnv:
 
     def __init__(self, difficulty: str = "easy"):
-        assert difficulty in ("easy", "medium", "hard", "expert")
+        assert difficulty in ("easy", "medium", "hard", "expert", "multi")
         self.difficulty = difficulty
         self._reset_state()
 
@@ -122,6 +154,7 @@ class WorkSchedulerEnv:
             "missed_deadlines": self.missed_deadlines,
             "cancelled_tasks":  self.cancelled_tasks,
             "total_tasks":      self.total_tasks,
+            "projects": self._get_project_summary(),
             "pending_tasks":    [t.model_dump() for t in self.pending_tasks],
             "workers":          [w.model_dump() for w in self.workers],
         }
@@ -158,9 +191,17 @@ class WorkSchedulerEnv:
         elif self.difficulty == "hard":
             self.pending_tasks = copy.deepcopy(HARD_TASKS)
             self.workers       = copy.deepcopy(HARD_WORKERS)
-        else:   # expert
+        elif self.difficulty == "expert":
             self.pending_tasks = copy.deepcopy(EXPERT_TASKS)
             self.workers       = copy.deepcopy(EXPERT_WORKERS)
+            self._urgent_injected = False
+        else:   # ← this is where you add multi
+            self.pending_tasks = (
+                copy.deepcopy(PROJECT_FRONTEND) +
+                copy.deepcopy(PROJECT_BACKEND)  +
+                copy.deepcopy(PROJECT_INFRA)
+            )
+            self.workers = copy.deepcopy(MULTI_WORKERS)
             self._urgent_injected = False
 
         self.current_step      = 0
@@ -168,9 +209,9 @@ class WorkSchedulerEnv:
         self.missed_deadlines  = 0
         self.done              = False
         self.total_tasks       = len(self.pending_tasks)
-        self.cancelled_tasks   = []        # NEW — tracks cancelled task IDs
-        self._cancel_step      = max(3, len(self.pending_tasks) // 3)  # cancel at 1/3 through
-        self._cancelled_already = False    # NEW
+        self.cancelled_tasks   = []
+        self._cancel_step      = max(3, len(self.pending_tasks) // 3)
+        self._cancelled_already = False
 
     def _apply_action(self, action: Action) -> Tuple[Reward, Dict]:
         task   = next((t for t in self.pending_tasks if t.id == action.task_id), None)
@@ -249,6 +290,8 @@ class WorkSchedulerEnv:
                 if w:
                     w.available = False
     def _apply_cancellation(self):
+        if self.difficulty == "multi":   # ← ADD THIS LINE
+            return
         """Cancel one pending task once, at a fixed step."""
         if self._cancelled_already:
             return
@@ -257,8 +300,36 @@ class WorkSchedulerEnv:
         if not self.pending_tasks:
             return
 
+        # Get all task IDs that other tasks depend on
+        depended_on = set()
+        for t in self.pending_tasks:
+            for d in t.depends_on:
+                depended_on.add(d)
+
+        # Also protect assigned tasks' dependents
+        all_task_ids = set(t.id for t in self.pending_tasks)
+
+        # Only cancel tasks that:
+        # 1. Nothing else depends on them
+        # 2. Are not the only remaining task in their project
+        project_counts = {}
+        for t in self.pending_tasks:
+            pid = t.project_id
+            project_counts[pid] = project_counts.get(pid, 0) + 1
+
+        safe_to_cancel = [
+            t for t in self.pending_tasks
+            if t.id not in depended_on
+            and project_counts.get(t.project_id, 0) > 1
+        ]
+
+        if not safe_to_cancel:
+            self._cancelled_already = True
+            return  # nothing safe — skip cancellation this episode
+
+        # Cancel lowest priority safe task
         candidate = sorted(
-            self.pending_tasks,
+            safe_to_cancel,
             key=lambda t: (t.priority, t.deadline or 999)
         )[0]
 
@@ -267,7 +338,7 @@ class WorkSchedulerEnv:
             t for t in self.pending_tasks if t.id != candidate.id
         ]
         self.total_tasks -= 1
-        self._cancelled_already = True     # NEW — never run again
+        self._cancelled_already = True
     def _apply_expert_events(self):
         # Worker goes on leave
         for wid, leave_step in EXPERT_LEAVE.items():
@@ -294,8 +365,13 @@ class WorkSchedulerEnv:
             if not all(d in self.assigned for d in task.depends_on):
                 continue
             for w in self.workers:
-                if w.available and len(w.assigned_task_ids) < w.capacity:
-                    return False
+                if not w.available:
+                    continue
+                if len(w.assigned_task_ids) >= w.capacity + w.overtime_capacity:
+                    continue
+                if task.required_skill and task.required_skill not in w.skills:
+                    continue
+                return False  # valid move exists
         return True
 
     def _build_observation(self) -> Observation:
@@ -307,4 +383,14 @@ class WorkSchedulerEnv:
             total_tasks       = self.total_tasks,
             missed_deadlines  = self.missed_deadlines,
             cancelled_tasks  = list(self.cancelled_tasks),
+            projects         = self._get_project_summary(),
         )
+    def _get_project_summary(self) -> Dict[str, List[str]]:
+        """Returns dict of project_id → list of pending task IDs."""
+        summary = {}
+        for task in self.pending_tasks:
+            pid = task.project_id
+            if pid not in summary:
+                summary[pid] = []
+            summary[pid].append(task.id)
+        return summary
