@@ -28,16 +28,16 @@ EASY_TASKS = [
 ]
 
 EASY_WORKERS = [
-    Worker(id="w1",  name="Alice",   capacity=3, skills=["backend", "devops"]),
-    Worker(id="w2",  name="Bob",     capacity=3, skills=["testing", "backend"]),
-    Worker(id="w3",  name="Charlie", capacity=2, skills=["writing", "testing"]),
-    Worker(id="w4",  name="Diana",   capacity=3, skills=["frontend", "writing"]),
-    Worker(id="w5",  name="Eve",     capacity=2, skills=["security", "backend"]),
-    Worker(id="w6",  name="Frank",   capacity=3, skills=["devops", "testing"]),
-    Worker(id="w7",  name="Grace",   capacity=2, skills=["frontend", "security"]),
-    Worker(id="w8",  name="Henry",   capacity=3, skills=["backend", "writing"]),
-    Worker(id="w9",  name="Iris",    capacity=2, skills=["testing", "frontend"]),
-    Worker(id="w10", name="Jack",    capacity=3, skills=["devops", "security"]),
+    Worker(id="w1",  name="Alice",   capacity=3, skills=["backend", "devops"],      hourly_rate=80.0),
+    Worker(id="w2",  name="Bob",     capacity=3, skills=["testing", "backend"],     hourly_rate=70.0),
+    Worker(id="w3",  name="Charlie", capacity=2, skills=["writing", "testing"],     hourly_rate=50.0),
+    Worker(id="w4",  name="Diana",   capacity=3, skills=["frontend", "writing"],    hourly_rate=65.0),
+    Worker(id="w5",  name="Eve",     capacity=2, skills=["security", "backend"],    hourly_rate=90.0),
+    Worker(id="w6",  name="Frank",   capacity=3, skills=["devops", "testing"],      hourly_rate=75.0),
+    Worker(id="w7",  name="Grace",   capacity=2, skills=["frontend", "security"],   hourly_rate=70.0),
+    Worker(id="w8",  name="Henry",   capacity=3, skills=["backend", "writing"],     hourly_rate=60.0),
+    Worker(id="w9",  name="Iris",    capacity=2, skills=["testing", "frontend"],    hourly_rate=55.0),
+    Worker(id="w10", name="Jack",    capacity=3, skills=["devops", "security"],     hourly_rate=85.0),
 ]
 
 MEDIUM_TASKS = [
@@ -49,9 +49,9 @@ MEDIUM_TASKS = [
     Task(id="t6", name="Security audit",    duration=3, deadline=6, priority=3, required_skill="security"),
 ]
 MEDIUM_WORKERS = [
-    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "security"]),
-    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"]),
-    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "testing"]),
+    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "security"],  hourly_rate=80.0),
+    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"],    hourly_rate=70.0),
+    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "testing"],  hourly_rate=60.0),
 ]
 
 HARD_TASKS = [
@@ -65,10 +65,10 @@ HARD_TASKS = [
     Task(id="t8", name="Go-live deployment",  duration=2, deadline=11, priority=3, depends_on=["t7"], required_skill="devops"),
 ]
 HARD_WORKERS = [
-    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "management"]),
-    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"]),
-    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "security"]),
-    Worker(id="w4", name="Diana",   capacity=2, skills=["backend", "security"]),
+    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "management"], hourly_rate=80.0),
+    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"],     hourly_rate=70.0),
+    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "security"],  hourly_rate=65.0),
+    Worker(id="w4", name="Diana",   capacity=2, skills=["backend", "security"],   hourly_rate=90.0),
 ]
 # In hard mode: Bob goes on leave after step 4
 HARD_LEAVE = {"w2": 4}
@@ -85,11 +85,11 @@ EXPERT_TASKS = [
     Task(id="t10", name="Production deployment",  duration=2, deadline=12, priority=3, depends_on=["t8","t9"], required_skill="devops"),
 ]
 EXPERT_WORKERS = [
-    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "management"]),
-    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"]),
-    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "testing"]),
-    Worker(id="w4", name="Diana",   capacity=2, skills=["security", "backend"]),
-    Worker(id="w5", name="Eve",     capacity=2, skills=["frontend", "management"]),
+    Worker(id="w1", name="Alice",   capacity=3, skills=["backend", "management"], hourly_rate=80.0),
+    Worker(id="w2", name="Bob",     capacity=3, skills=["devops", "testing"],     hourly_rate=70.0),
+    Worker(id="w3", name="Charlie", capacity=2, skills=["frontend", "testing"],   hourly_rate=60.0),
+    Worker(id="w4", name="Diana",   capacity=2, skills=["security", "backend"],   hourly_rate=90.0),
+    Worker(id="w5", name="Eve",     capacity=2, skills=["frontend", "management"],hourly_rate=75.0),
 ]
 # Expert mode events: Bob leaves at step 3, urgent task injected at step 5
 EXPERT_LEAVE   = {"w2": 3}
@@ -99,11 +99,11 @@ EXPERT_URGENT  = Task(
     required_skill="devops"
 )
 MULTI_WORKERS = [
-    Worker(id="w1", name="Alice",   capacity=6, skills=["backend",  "management"]),
-    Worker(id="w2", name="Bob",     capacity=5, skills=["devops",   "testing"]),
-    Worker(id="w3", name="Charlie", capacity=5, skills=["frontend", "writing"]),
-    Worker(id="w4", name="Diana",   capacity=5, skills=["security", "backend"]),
-    Worker(id="w5", name="Eve",     capacity=5, skills=["testing",  "frontend"]),
+    Worker(id="w1", name="Alice",   capacity=6, skills=["backend",  "management"], hourly_rate=80.0),
+    Worker(id="w2", name="Bob",     capacity=5, skills=["devops",   "testing"],    hourly_rate=70.0),
+    Worker(id="w3", name="Charlie", capacity=5, skills=["frontend", "writing"],    hourly_rate=60.0),
+    Worker(id="w4", name="Diana",   capacity=5, skills=["security", "backend"],    hourly_rate=90.0),
+    Worker(id="w5", name="Eve",     capacity=5, skills=["testing",  "frontend"],   hourly_rate=65.0),
 ]
 # ── Multi-project mode ─────────────────────────────────────────
 
@@ -154,6 +154,9 @@ class WorkSchedulerEnv:
             "missed_deadlines": self.missed_deadlines,
             "cancelled_tasks":  self.cancelled_tasks,
             "total_tasks":      self.total_tasks,
+            "total_cost":      round(self.total_cost, 2),
+            "budget_limit":    self.budget_limit,
+            "budget_remaining": round(self.budget_limit - self.total_cost, 2),
             "projects": self._get_project_summary(),
             "pending_tasks":    [t.model_dump() for t in self.pending_tasks],
             "workers":          [w.model_dump() for w in self.workers],
@@ -212,6 +215,12 @@ class WorkSchedulerEnv:
         self.cancelled_tasks   = []
         self._cancel_step      = max(3, len(self.pending_tasks) // 3)
         self._cancelled_already = False
+        self.total_cost   = 0.0
+        # Budget = sum of all task durations × average hourly rate × 1.3 buffer
+        avg_rate = sum(w.hourly_rate for w in self.workers) / len(self.workers)
+        self.budget_limit = round(
+            sum(t.duration for t in self.pending_tasks) * avg_rate * 1.3, 2
+        )
 
     def _apply_action(self, action: Action) -> Tuple[Reward, Dict]:
         task   = next((t for t in self.pending_tasks if t.id == action.task_id), None)
@@ -240,7 +249,17 @@ class WorkSchedulerEnv:
         self.assigned[task.id] = worker.id
         self.pending_tasks = [t for t in self.pending_tasks if t.id != task.id]
 
-        # Calculate reward
+        # Track cost
+        task_cost = task.duration * worker.hourly_rate
+        self.total_cost += task_cost
+
+        # Budget penalty
+        budget_ratio = self.total_cost / max(self.budget_limit, 1)
+        if budget_ratio > 1.0:
+            budget_penalty = min(0.2, (budget_ratio - 1.0) * 0.5)
+        else:
+            budget_penalty = 0.0
+
         # Base score
         score = 0.5
 
@@ -249,37 +268,39 @@ class WorkSchedulerEnv:
             score += 0.1
 
         # Priority bonus
-        score += (task.priority - 1) * 0.1   # +0.0, +0.1, or +0.2
+        score += (task.priority - 1) * 0.1
 
         # Deadline bonus/penalty
         if task.deadline is not None:
             steps_remaining = task.deadline - self.current_step
             if steps_remaining < 0:
-                score -= 0.2                  # already past deadline
+                score -= 0.2
             elif steps_remaining <= 1:
-                score += 0.2                  # urgent — assigned just in time
+                score += 0.2
             elif steps_remaining <= 3:
-                score += 0.15                 # assigned with a little buffer
+                score += 0.15
             else:
-                score += 0.05                 # assigned early, small bonus
+                score += 0.05
 
-        # Workload balance — bonus for normal load, penalty for overtime
+        # Workload balance
         load = len(worker.assigned_task_ids) / worker.capacity
         if load <= 0.5:
-            score += 0.1                      # well balanced
+            score += 0.1
         elif load > 1.0:
-            score -= 0.15                     # overtime penalty — hurts quality
+            score -= 0.15
 
-        # Penalty for assigning a low priority task when high priority ones exist
+        # Penalize ignoring urgent tasks
         high_priority_pending = [
             t for t in self.pending_tasks
-            if t.priority == 3 and t.id != task.id
+            if t.priority == 3
             and all(d in self.assigned for d in t.depends_on)
         ]
         if high_priority_pending and task.priority == 1:
-            score -= 0.1                      # penalize ignoring urgent tasks
+            score -= 0.1
 
-        score = round(min(1.0, max(0.0, score)), 3)
+        # Apply budget penalty
+        score = round(min(1.0, max(0.0, score - budget_penalty)), 3)
+
         return Reward(value=score, reason=f"Assigned '{task.name}' to {worker.name}."), \
                {"task": task.id, "worker": worker.id}
 
@@ -382,8 +403,11 @@ class WorkSchedulerEnv:
             assigned          = dict(self.assigned),
             total_tasks       = self.total_tasks,
             missed_deadlines  = self.missed_deadlines,
-            cancelled_tasks  = list(self.cancelled_tasks),
-            projects         = self._get_project_summary(),
+            cancelled_tasks   = list(self.cancelled_tasks),
+            projects          = self._get_project_summary(),
+            total_cost        = round(self.total_cost, 2),
+            budget_limit      = self.budget_limit,
+            budget_remaining  = round(self.budget_limit - self.total_cost, 2),
         )
     def _get_project_summary(self) -> Dict[str, List[str]]:
         """Returns dict of project_id → list of pending task IDs."""

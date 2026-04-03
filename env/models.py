@@ -11,6 +11,7 @@ class Task(BaseModel):
     is_assigned: bool = False
     required_skill: Optional[str] = None
     project_id: str = "default"
+    cost: float = 0.0
 
 class Worker(BaseModel):
     id: str
@@ -19,7 +20,8 @@ class Worker(BaseModel):
     overtime_capacity: int = 1
     assigned_task_ids: List[str] = []
     available: bool = True
-    skills: List[str] = []                 # NEW — e.g. ["backend", "testing"]
+    skills: List[str] = []  
+    hourly_rate: float = 50.0 
 
 class Observation(BaseModel):
     pending_tasks: List[Task]
@@ -30,6 +32,9 @@ class Observation(BaseModel):
     missed_deadlines: int = 0
     cancelled_tasks: List[str] = []
     projects: Dict[str, List[str]] = {}
+    total_cost: float = 0.0            # NEW
+    budget_limit: float = 0.0          # NEW
+    budget_remaining: float = 0.0      # NEW
 
 class Action(BaseModel):
     task_id: str
