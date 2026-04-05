@@ -12,6 +12,9 @@ class Task(BaseModel):
     required_skill: Optional[str] = None
     project_id: str = "default"
     cost: float = 0.0
+    is_recurring: bool = False         # NEW
+    recur_every: int = 0               # NEW — respawn every N steps
+    recur_count: int = 0 
 
 class Worker(BaseModel):
     id: str
@@ -32,9 +35,9 @@ class Observation(BaseModel):
     missed_deadlines: int = 0
     cancelled_tasks: List[str] = []
     projects: Dict[str, List[str]] = {}
-    total_cost: float = 0.0            # NEW
-    budget_limit: float = 0.0          # NEW
-    budget_remaining: float = 0.0      # NEW
+    total_cost: float = 0.0           
+    budget_limit: float = 0.0          
+    budget_remaining: float = 0.0     
 
 class Action(BaseModel):
     task_id: str

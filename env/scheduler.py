@@ -98,6 +98,15 @@ EXPERT_URGENT  = Task(
     duration=2, deadline=7, priority=3,
     required_skill="devops"
 )
+# Recurring tasks — respawn every N steps
+RECURRING_TASKS = [
+    Task(id="r1", name="Daily standup",       duration=1, priority=1,
+         required_skill="management", is_recurring=True, recur_every=3),
+    Task(id="r2", name="Code review session", duration=2, priority=2,
+         required_skill="backend",    is_recurring=True, recur_every=5),
+    Task(id="r3", name="Weekly report",       duration=1, priority=1,
+         required_skill="writing",    is_recurring=True, recur_every=7),
+]
 MULTI_WORKERS = [
     Worker(id="w1", name="Alice",   capacity=6, skills=["backend",  "management"], hourly_rate=80.0),
     Worker(id="w2", name="Bob",     capacity=5, skills=["devops",   "testing"],    hourly_rate=70.0),
@@ -157,6 +166,7 @@ class WorkSchedulerEnv:
             "total_cost":      round(self.total_cost, 2),
             "budget_limit":    self.budget_limit,
             "budget_remaining": round(self.budget_limit - self.total_cost, 2),
+            "missed_recurring": self._missed_recurring,
             "projects": self._get_project_summary(),
             "pending_tasks":    [t.model_dump() for t in self.pending_tasks],
             "workers":          [w.model_dump() for w in self.workers],
@@ -176,6 +186,8 @@ class WorkSchedulerEnv:
         if self.difficulty == "expert":
             self._apply_expert_events()
         self._apply_cancellation()   
+        self._apply_recurring_tasks()    # NEW
+        self._check_missed_recurring()   # NEW
 
         self._check_missed_deadlines()
         self.done = self._check_done()
@@ -221,6 +233,8 @@ class WorkSchedulerEnv:
         self.budget_limit = round(
             sum(t.duration for t in self.pending_tasks) * avg_rate * 1.3, 2
         )
+        self._recurring_templates = copy.deepcopy(RECURRING_TASKS)  # NEW
+        self._missed_recurring    = 0                                # NEW
 
     def _apply_action(self, action: Action) -> Tuple[Reward, Dict]:
         task   = next((t for t in self.pending_tasks if t.id == action.task_id), None)
@@ -360,6 +374,49 @@ class WorkSchedulerEnv:
         ]
         self.total_tasks -= 1
         self._cancelled_already = True
+    
+    def _apply_recurring_tasks(self):
+        """Spawn recurring tasks at their intervals."""
+        for template in self._recurring_templates:
+            if template.recur_every == 0:
+                continue
+            if self.current_step % template.recur_every != 0:
+                continue
+
+            # Check if this recurring task is already pending
+            already_pending = any(
+                t.id.startswith(template.id) for t in self.pending_tasks
+            )
+            if already_pending:
+                continue
+
+            # Spawn a new instance with unique ID
+            template.recur_count += 1
+            new_task = Task(
+                id            = f"{template.id}_v{template.recur_count}",
+                name          = template.name,
+                duration      = template.duration,
+                priority      = template.priority,
+                required_skill= template.required_skill,
+                is_recurring  = True,
+                recur_every   = template.recur_every,
+                deadline      = self.current_step + template.recur_every - 1,
+            )
+            self.pending_tasks.append(new_task)
+            self.total_tasks += 1
+    
+    def _check_missed_recurring(self):
+        """Penalize recurring tasks that expired without being assigned."""
+        expired = [
+            t for t in self.pending_tasks
+            if t.is_recurring
+            and t.deadline is not None
+            and self.current_step > t.deadline
+        ]
+        self._missed_recurring += len(expired)
+        self.pending_tasks = [
+            t for t in self.pending_tasks if t not in expired
+        ]
     def _apply_expert_events(self):
         # Worker goes on leave
         for wid, leave_step in EXPERT_LEAVE.items():
