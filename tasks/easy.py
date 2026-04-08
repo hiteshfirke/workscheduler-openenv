@@ -17,8 +17,8 @@ def grade(agent_fn) -> dict:
 
     state = env.state()
     assigned_count = len(state["assigned"])
-    score = round(assigned_count / total_tasks, 3)
-
+    score = round(min(1.0, assigned_count / total_tasks), 3)
+    
     return {
         "task": "easy",
         "score": score,
