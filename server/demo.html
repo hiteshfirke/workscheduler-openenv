@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkScheduler — live demo</title>
+<meta name="description" content="An OpenEnv reinforcement-learning environment where an agent assigns tasks to a team under deadlines, dependencies, skills, leave, budget and surprises.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --board:#E6EBF0; --panel:#FFFFFF; --ink:#18233B; --ink-2:#4A5670; --ink-3:#7B869C;
+  --line:#CBD3DD; --blue:#2952CC; --blue-ink:#1D3E9E; --amber:#B97F00; --amber-bg:#FFF4D6;
+  --red:#B8322A; --red-bg:#FBE6E4; --green:#23805A; --green-bg:#E1F3EA;
+  --sk-backend:#2952CC; --sk-frontend:#8A4FBF; --sk-devops:#1F8A8A; --sk-testing:#C2741F;
+  --sk-security:#5E6B2E; --sk-writing:#7A5C3E; --sk-management:#A0457A; --sk-none:#7B869C;
+  --r-ticket:6px; --r-panel:12px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--board);color:var(--ink);font:15px/1.5 "Instrument Sans",system-ui,sans-serif}
+a{color:var(--blue-ink)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+
+.wrap{max-width:1360px;margin:0 auto;padding:28px 24px 48px}
+header.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between;margin-bottom:24px}
+h1{font:700 clamp(34px,5vw,52px)/1 "Bricolage Grotesque",sans-serif;letter-spacing:-.02em;margin:0 0 10px}
+.lede{max-width:62ch;margin:0;color:var(--ink-2);font-size:16px}
+.links{display:flex;gap:18px;font-weight:500;font-size:14px}
+
+/* controls */
+.controls{display:grid;grid-template-columns:1fr auto;gap:14px 24px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-panel);padding:14px 16px;margin-bottom:16px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--board)}
+.seg button{white-space:nowrap;border:0;background:transparent;padding:8px 14px;cursor:pointer;font-weight:500;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.seg button:not([aria-pressed="true"]):hover{background:#D9E0E8}
+.scenario{color:var(--ink-2);font-size:14px;margin:0;grid-column:1/-1}
+.scenario strong{color:var(--ink)}
+.primary{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:10px 18px;font-weight:600;cursor:pointer}
+.primary:hover{background:var(--blue-ink)}
+.primary:disabled{opacity:.5;cursor:default}
+.ghost{background:transparent;border:1px solid var(--line);border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:500}
+.ghost:hover{background:var(--board)}
+label.speed{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink-2)}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-panel);overflow:hidden;margin-bottom:16px}
+.stat{background:var(--panel);padding:10px 14px}
+.stat .k{font-size:13px;color:var(--ink-3)}
+.stat .v{font:600 22px/1.2 "Bricolage Grotesque",sans-serif;font-variant-numeric:tabular-nums}
+.meter{height:6px;border-radius:3px;background:var(--board);margin-top:6px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--green);width:0;transition:width .3s}
+.meter.over i{background:var(--red)}
+
+/* main grid */
+.main{display:grid;grid-template-columns:270px minmax(0,1fr) 300px;gap:16px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-panel);padding:14px}
+.panel h2{font:600 17px/1.3 "Bricolage Grotesque",sans-serif;margin:0 0 4px}
+.panel .hint{font-size:13px;color:var(--ink-3);margin:0 0 12px}
+
+/* tickets */
+.backlog{display:flex;flex-direction:column;gap:8px;max-height:640px;overflow:auto;padding-right:2px}
+.ticket{position:relative;display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--sk,var(--sk-none));border-radius:var(--r-ticket);padding:8px 10px 8px 10px;cursor:default}
+.ticket .name{font-weight:600;font-size:14px;line-height:1.3}
+.ticket .meta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--ink-2);margin-top:4px}
+.ticket .pips{display:inline-flex;gap:2px;align-items:center}
+.ticket .pips b{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.ticket .pips b.on{background:var(--ink)}
+.ticket.blocked{opacity:.55;background:repeating-linear-gradient(135deg,#fff 0 6px,#F3F5F8 6px 12px)}
+.ticket.recurring{border-style:dashed;border-left-style:solid}
+.ticket.urgent{box-shadow:0 0 0 2px var(--amber)}
+.ticket.pickable{cursor:pointer}
+.ticket.pickable:hover{border-color:var(--ink-3)}
+.ticket.selected{box-shadow:0 0 0 3px var(--blue)}
+.ticket.flash{animation:flash .9s ease-out}
+.due-soon{color:var(--red);font-weight:600}
+.empty{color:var(--ink-3);font-size:14px;padding:12px 4px}
+
+/* board lanes */
+.lanes{display:flex;flex-direction:column;gap:8px}
+.lane{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#F7F9FB}
+.lane .who .nm{font-weight:600}
+.lane .who .rate{font-size:12px;color:var(--ink-3)}
+.skills{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.chip{font-size:11.5px;line-height:1;padding:3px 6px;border-radius:4px;color:#fff;background:var(--sk,var(--sk-none))}
+.slots{display:flex;flex-wrap:wrap;gap:6px}
+.slot{width:150px;min-height:44px;border:1px solid var(--line);border-radius:var(--r-ticket);background:#fff;display:flex}
+.slot.ot{border:1.5px dashed #A9B4C2;background:transparent}
+.slot .tk{flex:1;border-left:5px solid var(--sk,var(--sk-none));border-radius:var(--r-ticket);padding:5px 8px;font-size:12.5px;line-height:1.25;font-weight:500;background:#fff}
+.slot.ot .tk{background:var(--amber-bg)}
+.slot .tk small{display:block;color:var(--ink-3);font-weight:400}
+.slot .tk.pop{animation:pop .7s ease-out}
+.slot.label{align-items:center;justify-content:center;font-size:12px;color:var(--ink-3)}
+.lane.leave{background:repeating-linear-gradient(135deg,#F1F3F6 0 8px,#E6EAEF 8px 16px)}
+.lane.leave .who .nm::after{content:" on leave";color:var(--red);font-weight:600;font-size:12px}
+.lane.target{cursor:pointer}
+.lane.target:hover{border-color:var(--blue);background:#EEF2FC}
+.lane.just{border-color:var(--green)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink-3);margin-top:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend .sw{width:16px;height:12px;border-radius:3px;border:1px solid var(--line);background:#fff}
+.legend .sw.ot{border:1.5px dashed #A9B4C2;background:var(--amber-bg)}
+
+/* log */
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:640px;overflow:auto}
+.log li{font-size:13px;line-height:1.35;padding:7px 9px;border-radius:6px;background:var(--board)}
+.log li .st{color:var(--ink-3);font-variant-numeric:tabular-nums;margin-right:6px}
+.log li.ok{background:var(--green-bg)}
+.log li.bad{background:var(--red-bg)}
+.log li.ev{background:var(--amber-bg)}
+.log li.ev.missed,.log li.ev.cancel{background:var(--red-bg)}
+.rw{display:flex;align-items:center;gap:8px;margin-top:4px}
+.rw .bar{flex:1;height:5px;border-radius:3px;background:rgba(24,35,59,.12);overflow:hidden}
+.rw .bar i{display:block;height:100%;background:var(--ink)}
+.rw b{font-variant-numeric:tabular-nums;font-size:12px;width:34px;text-align:right}
+
+/* result */
+.result{display:none;border:2px solid var(--ink);background:var(--panel);border-radius:var(--r-panel);padding:16px 18px;margin-bottom:16px}
+.result.show{display:block}
+.result h2{font:700 22px/1.2 "Bricolage Grotesque",sans-serif;margin:0 0 6px}
+.result p{margin:4px 0;color:var(--ink-2);max-width:80ch}
+.result dl{display:flex;flex-wrap:wrap;gap:6px 24px;margin:10px 0 0}
+.result dt{font-size:12px;color:var(--ink-3)}
+.result dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+
+.about{margin-top:28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;color:var(--ink-2);font-size:14px}
+.about h3{font:600 16px/1.3 "Bricolage Grotesque",sans-serif;color:var(--ink);margin:0 0 6px}
+.about p{margin:0}
+.about code{font-size:13px;background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+footer{margin-top:28px;font-size:13px;color:var(--ink-3)}
+
+.err{background:var(--red-bg);color:var(--red);border-radius:8px;padding:10px 12px;margin-bottom:16px;display:none}
+.err.show{display:block}
+
+@keyframes pop{0%{transform:scale(.8);background:var(--green-bg)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+@keyframes flash{0%{background:var(--amber-bg)}100%{background:#fff}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+@media (max-width:1100px){
+  .main{grid-template-columns:240px minmax(0,1fr)}
+  .logpanel{grid-column:1/-1}
+  .log{max-height:260px}
+}
+@media (max-width:760px){
+  .wrap{padding:20px 16px 40px}
+  .controls{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stats .stat:last-child{grid-column:1/-1}
+  .main{grid-template-columns:1fr}
+  .backlog{max-height:320px}
+  .lane{grid-template-columns:1fr}
+  .slot{width:calc(50% - 3px)}
+  .about{grid-template-columns:1fr}
+  .seg button{padding:8px 10px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <h1>WorkScheduler</h1>
+    <p class="lede">A reinforcement-learning environment where an AI agent assigns tasks to a team while juggling deadlines, dependencies, skills, sick leave, a budget and surprises mid-shift. Pick a scenario, then watch the baseline agent work or try it yourself.</p>
+  </div>
+  <nav class="links">
+    <a href="/docs" target="_blank" rel="noopener">API docs</a>
+    <a href="https://huggingface.co/spaces/HiteshFirke/workscheduler-openenv/tree/main" target="_blank" rel="noopener">Source code</a>
+  </nav>
+</header>
+
+<section class="controls" aria-label="Scenario controls">
+  <div class="row">
+    <div class="seg" role="group" aria-label="Scenario" id="diffs"></div>
+    <div class="seg" role="group" aria-label="Mode" id="modes">
+      <button data-mode="watch" aria-pressed="true">Watch the agent</button>
+      <button data-mode="play" aria-pressed="false">Play it yourself</button>
+    </div>
+  </div>
+  <div class="row" id="actions">
+    <label class="speed" id="speedWrap">Speed
+      <select id="speed"><option value="1100">Slow</option><option value="600" selected>Normal</option><option value="200">Fast</option></select>
+    </label>
+    <button class="ghost" id="pauseBtn" hidden>Pause</button>
+    <button class="primary" id="runBtn">Run the agent</button>
+  </div>
+  <p class="scenario" id="scenarioText"></p>
+</section>
+
+<div class="err" id="err" role="alert"></div>
+
+<section class="result" id="result" aria-live="polite"></section>
+
+<section class="stats" aria-label="Episode stats">
+  <div class="stat"><div class="k">Step</div><div class="v" id="sStep">0</div></div>
+  <div class="stat"><div class="k">Project tasks assigned</div><div class="v" id="sAssigned">0 of 0</div></div>
+  <div class="stat"><div class="k">Deadlines missed</div><div class="v" id="sMissed">0</div></div>
+  <div class="stat"><div class="k">Average reward</div><div class="v" id="sReward">–</div></div>
+  <div class="stat"><div class="k">Budget used</div><div class="v" id="sBudget">0%</div><div class="meter" id="budgetMeter"><i></i></div></div>
+</section>
+
+<div class="main">
+  <section class="panel">
+    <h2>Backlog</h2>
+    <p class="hint" id="backlogHint">Tasks waiting for someone. Striped ones are blocked by another task.</p>
+    <div class="backlog" id="backlog"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Team board</h2>
+    <p class="hint" id="boardHint">Each row is a person. Solid boxes are normal capacity; the dashed box is overtime.</p>
+    <div class="lanes" id="lanes"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="panel logpanel">
+    <h2>What happened</h2>
+    <p class="hint">Every move gets a reward from 0 to 1. Amber lines are things the environment did on its own.</p>
+    <ol class="log" id="log" aria-live="polite"></ol>
+  </section>
+</div>
+
+<section class="about">
+  <div>
+    <h3>What the agent sees and does</h3>
+    <p>Each step it gets the backlog, every worker's skills, load and availability, and the budget. It answers with one move: give task X to worker Y.</p>
+  </div>
+  <div>
+    <h3>How moves are scored</h3>
+    <p>A valid assignment earns 0.5, plus bonuses for the right skill, high priority, beating a deadline and spreading load. Wrong skill, a busy or absent worker, or a blocked task scores 0.0–0.2.</p>
+  </div>
+  <div>
+    <h3>Use it from code</h3>
+    <p>Standard OpenEnv API: <code>POST /reset</code>, <code>POST /step</code>, <code>GET /state</code>, and <code>POST /grade</code> for the official score. Full reference in the <a href="/docs" target="_blank" rel="noopener">API docs</a>.</p>
+  </div>
+</section>
+
+<footer>Built by Hitesh Firke for the Meta PyTorch OpenEnv Hackathon × Scaler School of Technology. The "baseline agent" is a simple rule-based policy (urgent and high-priority first, least-loaded skilled worker), not a trained model.</footer>
+</div>
+
+<script>
+const SCENARIOS = {
+  easy:   {label:"Easy",   text:"20 independent tasks and 10 people. Match each task to someone with the right skill without overloading anyone."},
+  medium: {label:"Medium", text:"6 tasks with deadlines and dependencies on 3 people. Partway through, the client cancels one."},
+  hard:   {label:"Hard",   text:"A chain of 8 dependent tasks with tight deadlines. Bob, the only tester, goes on leave at step 4."},
+  expert: {label:"Expert", text:"Bob leaves at step 3, then a production outage lands at step 5 that needs a DevOps engineer."},
+  multi:  {label:"Multi-project", text:"Three projects (frontend, backend, infra) with 15 tasks competing for the same 5 people."},
+};
+const COMMON = " Recurring work (standups, code reviews, reports) also keeps appearing and expires if nobody picks it up.";
+const SKILLS = ["backend","frontend","devops","testing","security","writing","management"];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const skVar = s => `var(--sk-${SKILLS.includes(s) ? s : "none"})`;
+
+let difficulty = "easy", mode = "watch";
+let catalog = {}, obs = null, prevObs = null;
+let rewards = [], timer = null, paused = false, trace = null, frameIdx = 0;
+let session = null, selected = null, busy = false, lastAssigned = null;
+
+/* ---------- controls ---------- */
+const diffs = $("diffs");
+for (const [k, v] of Object.entries(SCENARIOS)) {
+  const b = document.createElement("button");
+  b.textContent = v.label; b.dataset.d = k; b.setAttribute("aria-pressed", k === difficulty);
+  b.onclick = () => { difficulty = k; syncButtons(); start(); };
+  diffs.appendChild(b);
+}
+document.querySelectorAll("#modes button").forEach(b => b.onclick = () => { mode = b.dataset.mode; syncButtons(); start(); });
+$("runBtn").onclick = () => mode === "watch" ? runAgent() : startPlay();
+$("pauseBtn").onclick = () => { paused = !paused; $("pauseBtn").textContent = paused ? "Resume" : "Pause"; if (!paused) tick(); };
+
+function syncButtons(){
+  diffs.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.d === difficulty));
+  document.querySelectorAll("#modes button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
+  $("scenarioText").innerHTML = `<strong>${SCENARIOS[difficulty].label}:</strong> ${esc(SCENARIOS[difficulty].text + COMMON)}`;
+  $("speedWrap").hidden = mode !== "watch";
+  $("runBtn").textContent = mode === "watch" ? "Run the agent" : "Start over";
+  $("backlogHint").textContent = mode === "play"
+    ? "Click a task, then click the person who should do it."
+    : "Tasks waiting for someone. Striped ones are blocked by another task.";
+}
+
+/* ---------- helpers ---------- */
+function showError(msg){ const e = $("err"); e.textContent = msg; e.classList.toggle("show", !!msg); }
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(`${path} returned ${r.status}. The Space may be waking up; try again in a few seconds.`);
+  return r.json();
+}
+function stopTimer(){ clearTimeout(timer); timer = null; }
+function remember(o){ for (const t of o.pending_tasks) if (!catalog[t.id]) catalog[t.id] = t; }
+const isProject = id => !(catalog[id] && catalog[id].is_recurring);
+
+function resetView(){
+  stopTimer(); paused = false; rewards = []; prevObs = null; lastAssigned = null; selected = null;
+  $("log").innerHTML = ""; $("result").className = "result"; $("result").innerHTML = "";
+  $("pauseBtn").hidden = true; $("pauseBtn").textContent = "Pause"; showError("");
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  if (!obs) return;
+  const assigned = obs.assigned;
+  const projAll = Object.keys(catalog).filter(isProject);
+  const projDone = Object.keys(assigned).filter(isProject);
+  $("sStep").textContent = obs.current_step;
+  $("sAssigned").textContent = `${projDone.length} of ${projAll.length - obs.cancelled_tasks.filter(isProject).length}`;
+  $("sMissed").textContent = obs.missed_deadlines;
+  $("sReward").textContent = rewards.length ? (rewards.reduce((a,b)=>a+b,0)/rewards.length).toFixed(2) : "–";
+  const pct = obs.budget_limit ? obs.total_cost / obs.budget_limit * 100 : 0;
+  $("sBudget").textContent = `${Math.round(pct)}%`;
+  $("budgetMeter").classList.toggle("over", pct > 100);
+  $("budgetMeter").firstElementChild.style.width = Math.min(100, pct) + "%";
+
+  // backlog
+  const prevIds = new Set(prevObs ? prevObs.pending_tasks.map(t => t.id) : []);
+  const tasks = [...obs.pending_tasks].sort((a,b) => (b.priority - a.priority) || ((a.deadline ?? 999) - (b.deadline ?? 999)));
+  $("backlog").innerHTML = tasks.length ? "" : `<p class="empty">Backlog is empty.</p>`;
+  for (const t of tasks) {
+    const blocked = t.depends_on.some(d => !(d in assigned));
+    const left = t.deadline != null ? t.deadline - obs.current_step : null;
+    const el = document.createElement(mode === "play" ? "button" : "div");
+    el.className = "ticket" + (blocked ? " blocked" : "") + (t.is_recurring ? " recurring" : "")
+      + (t.name.startsWith("URGENT") ? " urgent" : "") + (mode === "play" && !blocked ? " pickable" : "")
+      + (selected === t.id ? " selected" : "") + (prevObs && !prevIds.has(t.id) ? " flash" : "");
+    el.style.setProperty("--sk", skVar(t.required_skill));
+    el.innerHTML = `<div class="name">${esc(t.name)}</div>
+      <div class="meta">
+        <span class="pips" title="Priority ${t.priority} of 3">${[1,2,3].map(i=>`<b class="${i<=t.priority?"on":""}"></b>`).join("")}</span>
+        <span>${esc(t.required_skill || "any skill")}</span>
+        ${t.deadline != null ? `<span class="${left <= 1 ? "due-soon" : ""}">due step ${t.deadline}</span>` : ""}
+        ${blocked ? `<span>needs ${esc(t.depends_on.filter(d => !(d in assigned)).map(d => catalog[d] ? catalog[d].name : d).join(", "))}</span>` : ""}
+        ${t.is_recurring ? `<span>recurring</span>` : ""}
+      </div>`;
+    if (mode === "play") {
+      el.type = "button";
+      el.setAttribute("aria-pressed", selected === t.id);
+      el.disabled = blocked || obs._done;
+      el.onclick = () => { selected = selected === t.id ? null : t.id; render(); };
+    }
+    $("backlog").appendChild(el);
+  }
+
+  // lanes
+  $("lanes").innerHTML = "";
+  for (const w of obs.workers) {
+    const lane = document.createElement(mode === "play" && selected ? "button" : "div");
+    lane.className = "lane" + (!w.available ? " leave" : "") + (mode === "play" && selected && w.available ? " target" : "")
+      + (lastAssigned && lastAssigned.worker === w.id ? " just" : "");
+    if (lane.tagName === "BUTTON") { lane.type = "button"; lane.style.textAlign = "left"; lane.style.width = "100%"; lane.onclick = () => assignSelected(w.id); lane.setAttribute("aria-label", `Give the selected task to ${w.name}`); }
+    const slots = [];
+    const ids = w.assigned_task_ids;
+    const total = w.capacity + w.overtime_capacity;
+    for (let i = 0; i < total; i++) {
+      const tid = ids[i], ot = i >= w.capacity, t = tid && catalog[tid];
+      if (t) {
+        const pop = lastAssigned && lastAssigned.task === tid ? " pop" : "";
+        slots.push(`<div class="slot${ot ? " ot" : ""}"><div class="tk${pop}" style="--sk:${skVar(t.required_skill)}">${esc(t.name)}<small>${esc(t.required_skill || "any skill")}${ot ? ", overtime" : ""}</small></div></div>`);
+      } else {
+        slots.push(`<div class="slot${ot ? " ot label" : " label"}">${ot ? "overtime" : ""}</div>`);
+      }
+    }
+    lane.innerHTML = `<div class="who"><div class="nm">${esc(w.name)}</div>
+        <div class="skills">${w.skills.map(s => `<span class="chip" style="--sk:${skVar(s)}">${esc(s)}</span>`).join("")}</div>
+        <div class="rate">${ids.length > w.capacity ? `${w.capacity} tasks + overtime` : `${ids.length} of ${w.capacity} tasks`}, rate ${w.hourly_rate}/h</div></div>
+      <div class="slots">${slots.join("")}</div>`;
+    $("lanes").appendChild(lane);
+  }
+}
+
+function legend(){
+  const used = new Set();
+  Object.values(catalog).forEach(t => used.add(t.required_skill || "none"));
+  obs.workers.forEach(w => w.skills.forEach(s => used.add(s)));
+  $("legend").innerHTML = [...SKILLS, "none"].filter(s => used.has(s))
+    .map(s => `<span><span class="sw" style="border-left:5px solid ${skVar(s)}"></span>${s === "none" ? "any skill" : s}</span>`).join("")
+    + `<span><span class="sw ot"></span>overtime (costs reward)</span>`;
+}
+
+function logLine(cls, html){
+  const li = document.createElement("li"); li.className = cls; li.innerHTML = html;
+  $("log").prepend(li);
+}
+function logMove(step, reward, reason, valid){
+  logLine(valid ? "ok" : "bad", `<span class="st">Step ${step}</span>${esc(reason)}
+    <div class="rw"><span class="bar"><i style="width:${reward*100}%"></i></span><b>${reward.toFixed(2)}</b></div>`);
+}
+function logEvents(step, events){
+  for (const e of events) logLine(`ev ${e.kind}`, `<span class="st">Step ${step}</span>${esc(e.text)}`);
+}
+
+/* client-side copy of the server's event diff, used in play mode */
+function diffEvents(prev, cur){
+  const ev = [];
+  const pw = Object.fromEntries(prev.workers.map(w => [w.id, w]));
+  cur.workers.forEach(w => { if (pw[w.id].available && !w.available) ev.push({kind:"leave", text:`${w.name} went on leave`}); });
+  const pp = new Set(prev.pending_tasks.map(t => t.id)), np = new Set(cur.pending_tasks.map(t => t.id));
+  cur.pending_tasks.forEach(t => { if (!pp.has(t.id)) ev.push(t.is_recurring ? {kind:"recurring", text:`Recurring task due: ${t.name}`} : {kind:"urgent", text:`New task arrived: ${t.name}`}); });
+  cur.cancelled_tasks.forEach(id => { if (!prev.cancelled_tasks.includes(id)) ev.push({kind:"cancel", text:`Cancelled: ${catalog[id].name}`}); });
+  [...pp].filter(id => !np.has(id) && !(id in cur.assigned) && !cur.cancelled_tasks.includes(id)).sort()
+    .forEach(id => ev.push({kind:"missed", text:`Deadline missed: ${catalog[id].name}`}));
+  return ev;
+}
+
+/* ---------- watch mode ---------- */
+async function runAgent(){
+  resetView();
+  $("runBtn").disabled = true; $("runBtn").textContent = "Running…";
+  try {
+    trace = await api(`/demo/run?difficulty=${difficulty}`);
+  } catch (e) { showError(e.message); $("runBtn").disabled = false; $("runBtn").textContent = "Run the agent"; return; }
+  catalog = trace.catalog; obs = trace.initial; frameIdx = 0;
+  legend(); render();
+  $("pauseBtn").hidden = false;
+  timer = setTimeout(tick, 400);
+}
+
+function tick(){
+  if (paused || !trace) return;
+  if (frameIdx >= trace.frames.length) return finishWatch();
+  const f = trace.frames[frameIdx++];
+  prevObs = obs; obs = f.obs; rewards.push(f.reward);
+  lastAssigned = f.valid ? {task: f.action.task_id, worker: f.action.worker_id} : null;
+  logMove(f.step, f.reward, f.reason, f.valid);
+  logEvents(f.step, f.events);
+  render();
+  timer = setTimeout(tick, +$("speed").value);
+}
+
+function finishWatch(){
+  stopTimer(); $("pauseBtn").hidden = true;
+  $("runBtn").disabled = false; $("runBtn").textContent = "Run again";
+  const g = trace.grade, st = trace.final_state;
+  const proj = Object.keys(catalog).filter(isProject);
+  const done = Object.keys(st.assigned).filter(isProject).length;
+  const cancelled = st.cancelled_tasks.filter(isProject).length;
+  const left = proj.length - done - cancelled;
+  const why = trace.stuck ? "The agent ran out of valid moves." : "No valid moves were left, so the episode ended.";
+  $("result").innerHTML = `<h2>Episode over: grader score ${g.score.toFixed(3)}</h2>
+    <p>${why} The agent assigned ${done} of ${proj.length} project tasks${cancelled ? `, ${cancelled} ${cancelled === 1 ? "was" : "were"} cancelled by the client` : ""}${left > 0 ? `, and ${left} could not be done (missed deadline, or nobody with the skill was available)` : ""}.</p>
+    <dl>
+      <div><dt>Steps</dt><dd>${trace.frames.length}</dd></div>
+      <div><dt>Average reward</dt><dd>${(rewards.reduce((a,b)=>a+b,0)/Math.max(rewards.length,1)).toFixed(2)}</dd></div>
+      <div><dt>Deadlines missed</dt><dd>${st.missed_deadlines}</dd></div>
+      <div><dt>Recurring tasks missed</dt><dd>${st.missed_recurring}</dd></div>
+      <div><dt>Spent</dt><dd>${Math.round(st.total_cost)} of ${Math.round(st.budget_limit)}</dd></div>
+    </dl>
+    <p style="margin-top:10px">Think you can do better? Switch to <strong>Play it yourself</strong>.</p>`;
+  $("result").className = "result show";
+}
+
+/* ---------- play mode ---------- */
+async function startPlay(){
+  resetView();
+  $("runBtn").disabled = true;
+  try {
+    const r = await api("/reset", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({difficulty})});
+    session = r.session_id; catalog = {}; obs = r.observation; remember(obs);
+  } catch (e) { showError(e.message); $("runBtn").disabled = false; return; }
+  $("runBtn").disabled = false;
+  legend(); render();
+}
+
+async function assignSelected(workerId){
+  if (!selected || busy || !session) return;
+  busy = true;
+  const task = selected; selected = null;
+  try {
+    const r = await api("/step", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({session_id: session, task_id: task, worker_id: workerId})});
+    if (!r.observation) { showError(r.message || "Episode over."); busy = false; return; }
+    prevObs = obs; obs = r.observation; remember(obs);
+    rewards.push(r.reward.value);
+    const valid = r.info && r.info.task;
+    lastAssigned = valid ? {task, worker: workerId} : null;
+    logMove(obs.current_step, r.reward.value, r.reward.reason, !!valid);
+    logEvents(obs.current_step, diffEvents(prevObs, obs));
+    if (r.done) obs._done = true;
+    render();
+    if (r.done) await finishPlay();
+  } catch (e) { showError(e.message); }
+  busy = false;
+}
+
+async function finishPlay(){
+  const mine = rewards.reduce((a,b)=>a+b,0)/Math.max(rewards.length,1);
+  const proj = Object.keys(catalog).filter(isProject);
+  const done = Object.keys(obs.assigned).filter(isProject).length;
+  let cmp = "";
+  try {
+    const t = await api(`/demo/run?difficulty=${difficulty}`);
+    const avg = t.frames.reduce((a,f)=>a+f.reward,0)/Math.max(t.frames.length,1);
+    const bDone = Object.keys(t.final_state.assigned).filter(id => !(t.catalog[id] && t.catalog[id].is_recurring)).length;
+    cmp = `<p>The baseline agent averaged ${avg.toFixed(2)} reward per move and assigned ${bDone} project tasks on this scenario.</p>`;
+  } catch (e) {}
+  $("result").innerHTML = `<h2>Episode over: you averaged ${mine.toFixed(2)} reward per move</h2>
+    <p>You assigned ${done} of ${proj.length} project tasks in ${obs.current_step} steps, with ${obs.missed_deadlines} missed deadline${obs.missed_deadlines === 1 ? "" : "s"}.</p>${cmp}`;
+  $("result").className = "result show";
+}
+
+/* ---------- boot ---------- */
+async function start(){
+  resetView();
+  if (mode === "play") return startPlay();
+  try {
+    const r = await api("/reset", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({difficulty})});
+    catalog = {}; obs = r.observation; remember(obs); session = null;
+    legend(); render();
+  } catch (e) { showError(e.message); }
+  $("runBtn").disabled = false; $("runBtn").textContent = "Run the agent";
+}
+syncButtons();
+start();
+</script>
+</body>
+</html>

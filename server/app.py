@@ -1,5 +1,5 @@
 import os, sys, uuid
-from typing import Dict
+from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -14,6 +14,8 @@ app = FastAPI(
 )
 
 sessions: Dict[str, WorkSchedulerEnv] = {}
+DIFFICULTIES = ("easy", "medium", "hard", "expert", "multi")
+DEMO_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo.html")
 
 
 class ResetRequest(BaseModel):
@@ -29,7 +31,55 @@ class GradeRequest(BaseModel):
     difficulty: str = "easy"
 
 
-@app.get("/")
+# ── Baseline agent (shared by /grade and the live demo) ─────────
+
+def greedy(obs) -> Optional[Action]:
+    """
+    Highest priority + earliest deadline first, given to the least-loaded worker
+    who has the right skill. Uses normal capacity first, overtime only if needed.
+    Never sends a move it knows is invalid; returns None if there is no valid move.
+    """
+    assigned = set(obs.assigned.keys())
+    order = sorted(obs.pending_tasks, key=lambda t: (-t.priority, t.deadline or 999))
+    for use_overtime in (False, True):
+        for task in order:
+            if not all(d in assigned for d in task.depends_on):
+                continue
+            for w in sorted(obs.workers, key=lambda w: len(w.assigned_task_ids) / w.capacity):
+                limit = w.capacity + (w.overtime_capacity if use_overtime else 0)
+                if not w.available or len(w.assigned_task_ids) >= limit:
+                    continue
+                if task.required_skill and task.required_skill not in w.skills:
+                    continue
+                return Action(task_id=task.id, worker_id=w.id)
+    return None
+
+
+def get_graders():
+    from tasks.easy   import grade as grade_easy
+    from tasks.medium import grade as grade_medium
+    from tasks.hard   import grade as grade_hard
+    from tasks.expert import grade as grade_expert
+    from tasks.multi  import grade as grade_multi
+    return {
+        "easy":   grade_easy,
+        "medium": grade_medium,
+        "hard":   grade_hard,
+        "expert": grade_expert,
+        "multi":  grade_multi,
+    }
+
+
+# ── Pages ───────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    """Public demo page — what people see when they open the Space."""
+    with open(DEMO_PAGE, encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/health")
 def health_check():
     return {"status": "ok", "env": "workscheduler-openenv", "version": "1.0.0"}
 
@@ -38,7 +88,7 @@ def health_check():
 def info():
     return {
         "name": "workscheduler-openenv",
-        "tasks": ["easy", "medium", "hard", "expert"],
+        "tasks": list(DIFFICULTIES),
         "action_space": {"task_id": "string", "worker_id": "string"},
         "observation_space": {
             "pending_tasks": "list of unassigned tasks",
@@ -50,12 +100,14 @@ def info():
     }
 
 
+# ── OpenEnv API ─────────────────────────────────────────────────
+
 @app.post("/reset")
 def reset(req: ResetRequest = None):
     # Handle empty {} body from validation script
     if req is None:
         req = ResetRequest()
-    if req.difficulty not in ("easy", "medium", "hard", "expert", "multi"):
+    if req.difficulty not in DIFFICULTIES:
         req.difficulty = "easy"
 
     # Clean up if too many sessions
@@ -92,34 +144,84 @@ def step(req: StepRequest):
 
 @app.post("/grade")
 def grade(req: GradeRequest):
-    from tasks.easy   import grade as grade_easy
-    from tasks.medium import grade as grade_medium
-    from tasks.hard   import grade as grade_hard
-    from tasks.expert import grade as grade_expert
-
-    def greedy(obs):
-        assigned = set(obs.assigned.keys())
-        for task in sorted(obs.pending_tasks, key=lambda t: (-t.priority, t.deadline or 999)):
-            if all(d in assigned for d in task.depends_on):
-                for w in sorted(obs.workers, key=lambda w: len(w.assigned_task_ids)):
-                    if w.available and len(w.assigned_task_ids) < w.capacity:
-                        if not task.required_skill or task.required_skill in w.skills:
-                            return Action(task_id=task.id, worker_id=w.id)
-        for task in obs.pending_tasks:
-            for w in obs.workers:
-                if w.available and len(w.assigned_task_ids) < w.capacity:
-                    return Action(task_id=task.id, worker_id=w.id)
-
-    graders = {
-        "easy":   grade_easy,
-        "medium": grade_medium,
-        "hard":   grade_hard,
-        "expert": grade_expert,
-    }
+    graders = get_graders()
     if req.difficulty not in graders:
-        raise HTTPException(status_code=400, detail="difficulty must be easy, medium, hard or expert")
-
+        raise HTTPException(status_code=400, detail="difficulty must be one of: " + ", ".join(DIFFICULTIES))
     return graders[req.difficulty](greedy)
+
+
+# ── Live demo: run the baseline agent and return every step ─────
+
+def _events(prev, obs, catalog: Dict[str, dict]) -> List[dict]:
+    """Work out what the environment did on its own this step, by diffing observations."""
+    events = []
+    prev_workers = {w.id: w for w in prev.workers}
+    for w in obs.workers:
+        if prev_workers[w.id].available and not w.available:
+            events.append({"kind": "leave", "text": f"{w.name} went on leave"})
+
+    prev_pending = {t.id for t in prev.pending_tasks}
+    now_pending = {t.id for t in obs.pending_tasks}
+    for t in obs.pending_tasks:
+        if t.id not in prev_pending:
+            if t.is_recurring:
+                events.append({"kind": "recurring", "text": f"Recurring task due: {t.name}"})
+            else:
+                events.append({"kind": "urgent", "text": f"New task arrived: {t.name}"})
+
+    for tid in obs.cancelled_tasks:
+        if tid not in prev.cancelled_tasks:
+            events.append({"kind": "cancel", "text": f"Cancelled: {catalog[tid]['name']}"})
+
+    vanished = prev_pending - now_pending - set(obs.assigned) - set(obs.cancelled_tasks)
+    for tid in sorted(vanished):
+        events.append({"kind": "missed", "text": f"Deadline missed: {catalog[tid]['name']}"})
+    return events
+
+
+@app.get("/demo/run")
+def demo_run(difficulty: str = "easy"):
+    if difficulty not in DIFFICULTIES:
+        raise HTTPException(status_code=400, detail="difficulty must be one of: " + ", ".join(DIFFICULTIES))
+
+    env = WorkSchedulerEnv(difficulty=difficulty)
+    obs = env.reset()
+    catalog = {t.id: t.model_dump() for t in obs.pending_tasks}
+    initial = obs.model_dump()
+    frames = []
+    stuck = False
+
+    while not env.done and len(frames) < 80:
+        action = greedy(obs)
+        if action is None:
+            stuck = True
+            break
+        prev = obs
+        obs, reward, done, info = env.step(action)
+        for t in obs.pending_tasks:
+            catalog.setdefault(t.id, t.model_dump())
+        frames.append({
+            "step": obs.current_step,
+            "action": action.model_dump(),
+            "reward": reward.value,
+            "reason": reward.reason,
+            "valid": bool(info),
+            "events": _events(prev, obs, catalog),
+            "obs": obs.model_dump(),
+        })
+
+    return {
+        "difficulty": difficulty,
+        "initial": initial,
+        "catalog": catalog,
+        "frames": frames,
+        "stuck": stuck,
+        "final_state": env.state(),
+        "grade": get_graders()[difficulty](greedy),
+    }
+
+
+# ── Old live dashboard (kept for anyone using the raw API) ──────
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
@@ -132,7 +234,6 @@ def dashboard():
         workers = state["workers"]
         pending = state["pending_tasks"]
 
-        # Worker rows
         worker_html = ""
         for w in workers:
             load = len(w["assigned_task_ids"])
@@ -148,7 +249,6 @@ def dashboard():
               <td>{', '.join(w['assigned_task_ids']) or '—'}</td>
             </tr>"""
 
-        # Task summary
         task_html = ""
         for t in pending:
             deadline_str = f"step {t['deadline']}" if t.get('deadline') else "none"
@@ -157,7 +257,7 @@ def dashboard():
               <td>{t['id']}</td>
               <td>{t['name']}</td>
               <td>{'⭐' * t['priority']}</td>
-              <td>{t.get('required_skill','—')}</td>
+              <td>{t.get('required_skill') or '—'}</td>
               <td>{deadline_str}</td>
               <td style='color:#ffd93d'>pending</td>
             </tr>"""
@@ -165,54 +265,39 @@ def dashboard():
         for tid, wid in assigned.items():
             task_html += f"""
             <tr>
-              <td>{tid}</td>
-              <td>—</td>
-              <td>—</td>
-              <td>—</td>
-              <td>—</td>
+              <td>{tid}</td><td>—</td><td>—</td><td>—</td><td>—</td>
               <td style='color:#6bcb77'>assigned → {wid}</td>
             </tr>"""
 
         for tid in cancelled:
             task_html += f"""
             <tr>
-              <td>{tid}</td>
-              <td>—</td>
-              <td>—</td>
-              <td>—</td>
-              <td>—</td>
+              <td>{tid}</td><td>—</td><td>—</td><td>—</td><td>—</td>
               <td style='color:#ff6b6b'>cancelled</td>
             </tr>"""
 
         rows += f"""
         <div class='session'>
-          <h2>Session: {session_id} 
-              — {state['difficulty'].upper()} 
+          <h2>Session: {session_id}
+              — {state['difficulty'].upper()}
               — Step {state['current_step']}
               — Missed: {state['missed_deadlines']}
               {'— DONE' if state['done'] else ''}
           </h2>
-
           <h3>Workers</h3>
           <table>
-            <tr>
-              <th>Name</th><th>Skills</th><th>Load</th><th>Tasks</th>
-            </tr>
+            <tr><th>Name</th><th>Skills</th><th>Load</th><th>Tasks</th></tr>
             {worker_html}
           </table>
-
           <h3>Tasks</h3>
           <table>
-            <tr>
-              <th>ID</th><th>Name</th><th>Priority</th>
-              <th>Skill</th><th>Deadline</th><th>Status</th>
-            </tr>
+            <tr><th>ID</th><th>Name</th><th>Priority</th><th>Skill</th><th>Deadline</th><th>Status</th></tr>
             {task_html}
           </table>
         </div>"""
 
     if not rows:
-        rows = "<p style='color:#888'>No active sessions. Call /reset first to start one.</p>"
+        rows = "<p style='color:#888'>No active API sessions. Call /reset to start one, or open the <a href='/' style='color:#60a5fa'>live demo</a>.</p>"
 
     html = f"""
     <!DOCTYPE html>
@@ -221,43 +306,15 @@ def dashboard():
       <title>WorkScheduler Dashboard</title>
       <meta http-equiv='refresh' content='5'>
       <style>
-        body {{
-          font-family: monospace;
-          background: #1a1a2e;
-          color: #eee;
-          padding: 24px;
-        }}
+        body {{ font-family: monospace; background: #1a1a2e; color: #eee; padding: 24px; }}
         h1 {{ color: #a78bfa; margin-bottom: 8px; }}
         h2 {{ color: #60a5fa; border-bottom: 1px solid #333; padding-bottom: 6px; }}
         h3 {{ color: #34d399; margin-top: 16px; }}
-        table {{
-          border-collapse: collapse;
-          width: 100%;
-          margin-bottom: 16px;
-        }}
-        th {{
-          background: #2d2d44;
-          padding: 8px 12px;
-          text-align: left;
-          color: #a78bfa;
-        }}
-        td {{
-          padding: 6px 12px;
-          border-bottom: 1px solid #2a2a3e;
-        }}
-        tr:hover td {{ background: #2a2a3e; }}
-        .session {{
-          background: #16213e;
-          border: 1px solid #2d2d44;
-          border-radius: 8px;
-          padding: 16px;
-          margin-bottom: 24px;
-        }}
-        .footer {{
-          color: #555;
-          font-size: 12px;
-          margin-top: 24px;
-        }}
+        table {{ border-collapse: collapse; width: 100%; margin-bottom: 16px; }}
+        th {{ background: #2d2d44; padding: 8px 12px; text-align: left; color: #a78bfa; }}
+        td {{ padding: 6px 12px; border-bottom: 1px solid #2a2a3e; }}
+        .session {{ background: #16213e; border: 1px solid #2d2d44; border-radius: 8px; padding: 16px; margin-bottom: 24px; }}
+        .footer {{ color: #555; font-size: 12px; margin-top: 24px; }}
       </style>
     </head>
     <body>
@@ -265,14 +322,15 @@ def dashboard():
       <p style='color:#888'>Auto-refreshes every 5 seconds</p>
       {rows}
       <div class='footer'>
-        WorkScheduler-OpenEnv v1.0.0 — 
+        WorkScheduler-OpenEnv v1.0.0 — <a href='/' style='color:#60a5fa'>Live demo</a> —
         <a href='/docs' style='color:#60a5fa'>API Docs</a>
       </div>
     </body>
     </html>"""
 
     return HTMLResponse(content=html)
-    
+
+
 def main():
     import uvicorn
     port = int(os.environ.get("PORT", 7860))
