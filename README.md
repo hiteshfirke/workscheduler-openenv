@@ -20,6 +20,8 @@ The agent acts as a project manager — assigning tasks to workers while
 respecting deadlines, skill requirements, worker capacity, and task dependencies.
 In harder modes, workers go on leave mid-episode and urgent tasks arrive unexpectedly.
 
+**▶ Live demo:** [hiteshfirke-workscheduler-openenv.hf.space](https://hiteshfirke-workscheduler-openenv.hf.space) — pick a scenario, watch the baseline agent fill the board, or play it yourself.
+
 ---
 
 ## Baseline Scores
@@ -28,8 +30,8 @@ In harder modes, workers go on leave mid-episode and urgent tasks arrive unexpec
 |---|---|---|
 | Easy | 1.000 | ✅ |
 | Medium | 1.000 | ✅ |
-| Hard | 0.785 | ✅ |
-| Expert | 0.668 | ✅ |
+| Hard | 0.926 | ✅ |
+| Expert | 0.771 | ✅ |
 
 ---
 
@@ -37,7 +39,8 @@ In harder modes, workers go on leave mid-episode and urgent tasks arrive unexpec
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | GET | Health check |
+| `/` | GET | Live demo page |
+| `/health` | GET | Health check |
 | `/info` | GET | Environment metadata |
 | `/reset` | POST | Start a new episode |
 | `/step` | POST | Agent takes one action |
